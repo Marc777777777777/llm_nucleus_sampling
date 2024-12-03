@@ -110,7 +110,7 @@ num_outputs = 8
 all_outputs = {prompt: {strategy: [] for strategy in strategies} for prompt in prompts}
 for i, prompt in enumerate(prompts, 1):
     print(f"Processing Prompt {i}/{len(prompts)}: {prompt}")
-    inputs = tokenizer(prompt, return_tensors="pt", padding=True, truncation=True).to("cuda", torch.float16)
+    inputs = tokenizer(prompt, return_tensors="pt", padding=True, truncation=True).to("cuda")  # Fix applied here
     decoding_functions = get_decoding_functions(inputs)
     for j, (strategy, decode_func) in enumerate(zip(strategies, decoding_functions), 1):
         print(f"  Generating outputs for Strategy {j}/{len(strategies)}: {strategy}")
