@@ -22,11 +22,13 @@ bnb_config = BitsAndBytesConfig(
     bnb_8bit_dtype=torch.float16,
 )
 
-# Load model
+# Load model with offloading
 model = AutoModelForCausalLM.from_pretrained(
     model_name,
     quantization_config=bnb_config,
-    device_map="auto"
+    device_map="auto",
+    offload_folder="offload",  
+    torch_dtype=torch.float16
 )
 
 # Prompts
@@ -40,7 +42,7 @@ prompts = [
 
 # Sampling methods
 strategies = [
-    "Beam Search (b=16)",
+    "Beam Search (b=4)",  
     "Pure Sampling",
     "Temperature (t=0.9)",
     "Top-k (k=640)",
@@ -54,22 +56,22 @@ def get_decoding_functions(inputs):
         lambda: model.generate(
             inputs['input_ids'],
             attention_mask=inputs['attention_mask'],
-            max_length=200,
-            num_beams=16,
+            max_length=100,  
+            num_beams=4,  
             early_stopping=True,
             pad_token_id=tokenizer.eos_token_id
         ),
         lambda: model.generate(
             inputs['input_ids'],
             attention_mask=inputs['attention_mask'],
-            max_length=200,
+            max_length=100,
             do_sample=True,
             pad_token_id=tokenizer.eos_token_id
         ),
         lambda: model.generate(
             inputs['input_ids'],
             attention_mask=inputs['attention_mask'],
-            max_length=200,
+            max_length=100,
             do_sample=True,
             temperature=0.9,
             pad_token_id=tokenizer.eos_token_id
@@ -77,7 +79,7 @@ def get_decoding_functions(inputs):
         lambda: model.generate(
             inputs['input_ids'],
             attention_mask=inputs['attention_mask'],
-            max_length=200,
+            max_length=100,
             do_sample=True,
             top_k=640,
             pad_token_id=tokenizer.eos_token_id
@@ -85,7 +87,7 @@ def get_decoding_functions(inputs):
         lambda: model.generate(
             inputs['input_ids'],
             attention_mask=inputs['attention_mask'],
-            max_length=200,
+            max_length=100,
             do_sample=True,
             top_k=40,
             temperature=0.7,
@@ -94,7 +96,7 @@ def get_decoding_functions(inputs):
         lambda: model.generate(
             inputs['input_ids'],
             attention_mask=inputs['attention_mask'],
-            max_length=200,
+            max_length=100,
             do_sample=True,
             top_p=0.95,
             pad_token_id=tokenizer.eos_token_id
@@ -102,17 +104,18 @@ def get_decoding_functions(inputs):
     ]
 
 # Number of outputs per strategy per prompt
-num_outputs = 10
+num_outputs = 8
 
 # Generate outputs
 all_outputs = {prompt: {strategy: [] for strategy in strategies} for prompt in prompts}
 for i, prompt in enumerate(prompts, 1):
     print(f"Processing Prompt {i}/{len(prompts)}: {prompt}")
-    inputs = tokenizer(prompt, return_tensors="pt", padding=True, truncation=True).to("cuda")
+    inputs = tokenizer(prompt, return_tensors="pt", padding=True, truncation=True).to("cuda", torch.float16)
     decoding_functions = get_decoding_functions(inputs)
     for j, (strategy, decode_func) in enumerate(zip(strategies, decoding_functions), 1):
         print(f"  Generating outputs for Strategy {j}/{len(strategies)}: {strategy}")
         for k in range(num_outputs):
+            torch.cuda.empty_cache()  # Clear cache to free memory
             output = decode_func()
             all_outputs[prompt][strategy].append(tokenizer.decode(output[0], skip_special_tokens=True))
             print(f"    Generated Output {k+1}/{num_outputs} for Strategy: {strategy}")
@@ -126,7 +129,7 @@ for prompt_outputs in all_outputs.values():
 # Perplexity
 def perplexity(generations, model, tokenizer):
     combined_text = " ".join(generations)
-    inputs = tokenizer(combined_text, return_tensors="pt", padding=True, truncation=True).to("cuda")
+    inputs = tokenizer(combined_text, return_tensors="pt", padding=True, truncation=True).to("cuda", torch.float16)
     inputs['labels'] = inputs['input_ids'].clone()
     with torch.no_grad():
         outputs = model(**inputs)
