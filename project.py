@@ -35,9 +35,9 @@ model = AutoModelForCausalLM.from_pretrained(
 prompts = [
     "Describe a rainforest untouched by human hands and its unique ecosystem.",
     "Write a story about a magical sword that grants its wielder one wish.",
-    "What is the meaning of happiness from the perspective of a timeless entity?",
-    "Imagine you are a historian uncovering a lost diary from an ancient civilization.",
-    "How can communities build resilience in the face of global challenges?"
+    #"What is the meaning of happiness from the perspective of a timeless entity?",
+    #"Imagine you are a historian uncovering a lost diary from an ancient civilization.",
+    #"How can communities build resilience in the face of global challenges?"
 ]
 
 # Sampling methods
@@ -104,7 +104,7 @@ def get_decoding_functions(inputs):
     ]
 
 # Number of outputs per strategy per prompt
-num_outputs = 8
+num_outputs = 2
 
 # Generate outputs
 all_outputs = {prompt: {strategy: [] for strategy in strategies} for prompt in prompts}
@@ -129,7 +129,7 @@ for prompt_outputs in all_outputs.values():
 # Perplexity
 def perplexity(generations, model, tokenizer):
     combined_text = " ".join(generations)
-    inputs = tokenizer(combined_text, return_tensors="pt", padding=True, truncation=True).to("cuda", torch.float16)
+    inputs = tokenizer(combined_text, return_tensors="pt", padding=True, truncation=True).to("cuda")  # Fix applied here
     inputs['labels'] = inputs['input_ids'].clone()
     with torch.no_grad():
         outputs = model(**inputs)
