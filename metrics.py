@@ -13,7 +13,7 @@ metrics = {
     "Zipf Coefficient": []
 }
 
-def perplexity(prewritten_texts, model, tokenizer, strategy_func):
+def perplexity(prewritten_texts, model, tokenizer, strategy_func, fallback_value=1e6, min_length=10):
     perplexities = []
     for text in prewritten_texts:
         if text.strip(): 
@@ -28,17 +28,20 @@ def perplexity(prewritten_texts, model, tokenizer, strategy_func):
                 seq_logits = shift_logits[batch_idx] 
                 seq_labels = shift_labels[batch_idx]  
                 probabilities = strategy_func(seq_logits)  
-                probabilities = probabilities / probabilities.sum(dim=-1, keepdim=True)        
-                token_probs = probabilities[range(len(seq_labels)), seq_labels]       
-                token_probs = token_probs + 1e-12          
-                log_probs = torch.log(token_probs)          
-                if torch.any(torch.isnan(log_probs)) or torch.any(torch.isinf(log_probs)):
-                    continue      
-                loss = -log_probs.mean()  
-                perplexity = torch.exp(loss).item() 
-                batch_perplexities.append(perplexity) 
+                probabilities = torch.clamp(probabilities, min=1e-12)  
+                token_probs = probabilities[range(len(seq_labels)), seq_labels]  
+                token_probs = torch.clamp(token_probs, min=1e-12)  
+                log_probs = torch.log(token_probs)  
+                log_probs = torch.nan_to_num(log_probs, nan=0.0, posinf=0.0, neginf=0.0)
+                if len(log_probs) >= min_length:
+                    loss = -log_probs.mean()  
+                else:
+                    continue 
+                perplexity = torch.exp(loss).item() if loss.item() != float('inf') else fallback_value
+                if not np.isnan(perplexity) and perplexity != float('inf'):
+                    batch_perplexities.append(perplexity) 
             perplexities.extend(batch_perplexities)  
-    return sum(perplexities) / len(perplexities) if perplexities else float('inf')
+    return sum(perplexities) / len(perplexities) if perplexities else fallback_value
 
 def self_bleu(all_outputs, target_strategy):
     strategy_self_bleu_scores = []  

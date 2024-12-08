@@ -55,21 +55,25 @@ for prompt_outputs in all_outputs.values():
     for strategy, generations in prompt_outputs.items():
         combined_outputs[strategy].extend(generations)
 
+from datasets import load_dataset
+
 # Load prewritten dataset for perplexity
 dataset = load_dataset("wikitext", "wikitext-103-v1")
 
-# Extract 10k tokens from prewritten dataset
+# Extract from prewritten dataset
 max_tokens = 10000
+min_length = 50 
 total_tokens = 0
 prewritten_texts = []
 for example in dataset['test']['text']:
     if example.strip():  
         tokens = tokenizer.tokenize(example)
-        num_tokens = len(tokens)      
-        if total_tokens + num_tokens > max_tokens:  
-            break  
-        prewritten_texts.append(example)  
-        total_tokens += num_tokens  
+        num_tokens = len(tokens)
+        if num_tokens >= min_length: 
+            if total_tokens + num_tokens > max_tokens:  
+                break  
+            prewritten_texts.append(example)  
+            total_tokens += num_tokens 
 
 # Add computed metrics to metrics dictionary
 for strategy, generations in combined_outputs.items():
