@@ -20,20 +20,24 @@ def perplexity(prewritten_texts, model, tokenizer, strategy_func):
             inputs = tokenizer(text, return_tensors="pt", padding=True, truncation=True).to("cuda")
             input_ids = inputs['input_ids']
             with torch.no_grad():
-                logits = model(input_ids).logits       
-            shift_logits = logits[:, :-1, :] 
-            shift_labels = input_ids[:, 1:]     
+                logits = model(input_ids).logits  
+            shift_logits = logits[:, :-1, :]  
+            shift_labels = input_ids[:, 1:]  
             batch_perplexities = []
             for batch_idx in range(shift_logits.size(0)):  
                 seq_logits = shift_logits[batch_idx] 
                 seq_labels = shift_labels[batch_idx]  
                 probabilities = strategy_func(seq_logits)  
-                token_probs = probabilities[range(len(seq_labels)), seq_labels]  
-                log_probs = torch.log(token_probs + 1e-9)  
+                probabilities = probabilities / probabilities.sum(dim=-1, keepdim=True)        
+                token_probs = probabilities[range(len(seq_labels)), seq_labels]       
+                token_probs = token_probs + 1e-12          
+                log_probs = torch.log(token_probs)          
+                if torch.any(torch.isnan(log_probs)) or torch.any(torch.isinf(log_probs)):
+                    continue      
                 loss = -log_probs.mean()  
-                perplexity = torch.exp(loss).item()
-                batch_perplexities.append(perplexity)           
-            perplexities.extend(batch_perplexities)   
+                perplexity = torch.exp(loss).item() 
+                batch_perplexities.append(perplexity) 
+            perplexities.extend(batch_perplexities)  
     return sum(perplexities) / len(perplexities) if perplexities else float('inf')
 
 def self_bleu(all_outputs, target_strategy):
@@ -59,28 +63,38 @@ def self_bleu(all_outputs, target_strategy):
         strategy_avg_self_bleu = 0
     return strategy_avg_self_bleu
 
-def repetition(generations, tokenizer, min_phrase_length=2, min_repeats=3, window_size=200):
+from collections import Counter
+
+def repetition(generations, tokenizer, window_size=50, min_repeats=3, min_n=2):
+    total_repeated_tokens = 0  
     total_tokens = 0  
-    repeated_tokens = 0  
-    for text in generations:
-        tokens = tokenizer.tokenize(text)
-        if len(tokens) > window_size:
-            tokens = tokens[-window_size:]
-        for n in range(min_phrase_length, len(tokens) + 1):
-            ngrams = [tuple(tokens[i:i+n]) for i in range(len(tokens) - n + 1)]
+    for generation in generations:
+        tokens = tokenizer.tokenize(generation) 
+        if len(tokens) == 0:
+            continue
+        window_tokens = tokens[-window_size:]
+        for n in range(min_n, len(window_tokens) // min_repeats + 1):  
+            ngrams = [tuple(window_tokens[i:i + n]) for i in range(len(window_tokens) - n + 1)]       
             i = 0
-            while i < len(ngrams) - 1:
+            while i < len(ngrams) - min_repeats + 1:
                 current_ngram = ngrams[i]
                 consecutive_repeats = 1
-                while i + consecutive_repeats < len(ngrams) and ngrams[i + consecutive_repeats] == current_ngram:
-                    consecutive_repeats += 1
+                for j in range(i + 1, len(ngrams)):
+                    if ngrams[j] == current_ngram:
+                        consecutive_repeats += 1
+                    else:
+                        break         
                 if consecutive_repeats >= min_repeats:
-                    repeated_tokens += n * consecutive_repeats
-                i += consecutive_repeats  
-        total_tokens += len(tokens)
-    if total_tokens == 0:
-        return 0.0
-    return (repeated_tokens / total_tokens) * 100
+                    repeated_tokens = consecutive_repeats * n  
+                    total_repeated_tokens += repeated_tokens
+                    i += consecutive_repeats * n  
+                else:
+                    i += 1
+        total_tokens += len(tokens)  
+    if total_tokens == 0:  
+        return 0.0 
+    repetition_percentage = (total_repeated_tokens / total_tokens) * 100
+    return repetition_percentage
 
 def zipf_coefficient(generations, tokenizer):
     combined_text = " ".join(generations)
