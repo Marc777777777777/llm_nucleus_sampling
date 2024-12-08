@@ -13,33 +13,50 @@ metrics = {
     "Zipf Coefficient": []
 }
 
-def perplexity(prewritten_texts, model, tokenizer):
+def perplexity(prewritten_texts, model, tokenizer, strategy_func):
     perplexities = []
     for text in prewritten_texts:
-        if text.strip():  
+        if text.strip(): 
             inputs = tokenizer(text, return_tensors="pt", padding=True, truncation=True).to("cuda")
-            inputs['labels'] = inputs['input_ids'].clone()            
+            input_ids = inputs['input_ids']
             with torch.no_grad():
-                outputs = model(**inputs)         
-            loss = outputs.loss
-            if loss: 
+                logits = model(input_ids).logits       
+            shift_logits = logits[:, :-1, :] 
+            shift_labels = input_ids[:, 1:]     
+            batch_perplexities = []
+            for batch_idx in range(shift_logits.size(0)):  
+                seq_logits = shift_logits[batch_idx] 
+                seq_labels = shift_labels[batch_idx]  
+                probabilities = strategy_func(seq_logits)  
+                token_probs = probabilities[range(len(seq_labels)), seq_labels]  
+                log_probs = torch.log(token_probs + 1e-9)  
+                loss = -log_probs.mean()  
                 perplexity = torch.exp(loss).item()
-                perplexities.append(perplexity)
+                batch_perplexities.append(perplexity)           
+            perplexities.extend(batch_perplexities)   
     return sum(perplexities) / len(perplexities) if perplexities else float('inf')
 
-def self_bleu(all_outputs):
-    strategy_self_bleu_scores = {strategy: [] for strategy in strategies}
+def self_bleu(all_outputs, target_strategy):
+    strategy_self_bleu_scores = []  
     for prompt, prompt_outputs in all_outputs.items():
-        for strategy, generations in prompt_outputs.items():
-            scores = []
-            for i, gen in enumerate(generations):
-                bleu = load("bleu")
-                references = generations[:i] + generations[i+1:]  
+        if target_strategy not in prompt_outputs:
+            continue  
+        generations = prompt_outputs[target_strategy]
+        scores = []  
+        for i, gen in enumerate(generations):
+            bleu = load("bleu")  
+            references = generations[:i] + generations[i+1:]  
+            if references:  
                 bleu.add(prediction=gen, references=references)
-                scores.append(bleu.compute()["bleu"])
-            prompt_self_bleu = sum(scores) / len(scores)
-            strategy_self_bleu_scores[strategy].append(prompt_self_bleu)  
-    strategy_avg_self_bleu = {strategy: sum(scores) / len(scores) for strategy, scores in strategy_self_bleu_scores.items()} 
+                bleu_score = bleu.compute()["bleu"]
+                scores.append(bleu_score)  
+        if scores:  
+            prompt_self_bleu = sum(scores) / len(scores)  
+            strategy_self_bleu_scores.append(prompt_self_bleu)  
+    if strategy_self_bleu_scores: 
+        strategy_avg_self_bleu = sum(strategy_self_bleu_scores) / len(strategy_self_bleu_scores)
+    else:
+        strategy_avg_self_bleu = 0
     return strategy_avg_self_bleu
 
 def repetition(generations, tokenizer, min_phrase_length=2, min_repeats=3, window_size=200):

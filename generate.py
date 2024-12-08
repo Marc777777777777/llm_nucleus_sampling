@@ -1,10 +1,11 @@
 from huggingface_hub import login
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 import torch
+import torch.nn.functional as F
 import pandas as pd
 from datasets import load_dataset  
 from metrics import metrics, perplexity, self_bleu, repetition, zipf_coefficient  
-from strategies import strategies, get_decoding_functions 
+from strategies import strategies, get_decoding_functions, strategy_funcs
 from prompts import prompts
 
 # Connect to Hugging Face
@@ -48,7 +49,7 @@ for i, prompt in enumerate(prompts, 1):
             all_outputs[prompt][strategy].append(tokenizer.decode(output[0], skip_special_tokens=True))
             print(f"    Generated Output {k+1}/{num_outputs} for Strategy: {strategy}")
 
-# Combine outputs
+# Combine outputs for each strategy
 combined_outputs = {strategy: [] for strategy in strategies}
 for prompt_outputs in all_outputs.values():
     for strategy, generations in prompt_outputs.items():
@@ -57,7 +58,7 @@ for prompt_outputs in all_outputs.values():
 # Load prewritten dataset for perplexity
 dataset = load_dataset("wikitext", "wikitext-103-v1")
 
-# Extract 10K tokens from prewritten dataset
+# Extract 10k tokens from prewritten dataset
 max_tokens = 10000
 total_tokens = 0
 prewritten_texts = []
@@ -73,9 +74,10 @@ for example in dataset['test']['text']:
 # Add computed metrics to metrics dictionary
 for strategy, generations in combined_outputs.items():
     print(f"Computing metrics for Strategy: {strategy}")
+    strategy_func = strategy_funcs.get(strategy, lambda x: F.softmax(x, dim=-1))  
     metrics["Strategy"].append(strategy)
-    metrics["Perplexity"].append(perplexity(prewritten_texts, model, tokenizer)) 
-    metrics["Self-BLEU"].append(self_bleu(all_outputs))
+    metrics["Perplexity"].append(perplexity(prewritten_texts, model, tokenizer, strategy_func))
+    metrics["Self-BLEU"].append(self_bleu(all_outputs, strategy))  
     metrics["Repetition (%)"].append(repetition(generations, tokenizer))  
     metrics["Zipf Coefficient"].append(zipf_coefficient(generations, tokenizer))  
 
