@@ -55,8 +55,6 @@ for prompt_outputs in all_outputs.values():
     for strategy, generations in prompt_outputs.items():
         combined_outputs[strategy].extend(generations)
 
-from datasets import load_dataset
-
 # Load prewritten dataset for perplexity
 dataset = load_dataset("wikitext", "wikitext-103-v1")
 
