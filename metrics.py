@@ -5,6 +5,7 @@ from evaluate import load
 from scipy.stats import linregress
 from strategies import strategies
 
+# Dictionnary of metrics
 metrics = {
     "Strategy": [],
     "Perplexity": [],
@@ -13,6 +14,7 @@ metrics = {
     "Zipf Coefficient": []
 }
 
+# Perplexity function
 def perplexity(prewritten_texts, model, tokenizer, strategy_func, fallback_value=1e6, min_length=10):
     perplexities = []
     for text in prewritten_texts:
@@ -43,6 +45,7 @@ def perplexity(prewritten_texts, model, tokenizer, strategy_func, fallback_value
             perplexities.extend(batch_perplexities)  
     return sum(perplexities) / len(perplexities) if perplexities else fallback_value
 
+# Self-BLEU function
 def self_bleu(all_outputs, target_strategy):
     strategy_self_bleu_scores = []  
     for prompt, prompt_outputs in all_outputs.items():
@@ -66,8 +69,7 @@ def self_bleu(all_outputs, target_strategy):
         strategy_avg_self_bleu = 0
     return strategy_avg_self_bleu
 
-from collections import Counter
-
+# Repetition function
 def repetition(generations, tokenizer, window_size=50, min_repeats=3, min_n=2):
     total_repeated_tokens = 0  
     total_tokens = 0  
@@ -99,6 +101,7 @@ def repetition(generations, tokenizer, window_size=50, min_repeats=3, min_n=2):
     repetition_percentage = (total_repeated_tokens / total_tokens) * 100
     return repetition_percentage
 
+# Zipf coefficient function
 def zipf_coefficient(generations, tokenizer):
     combined_text = " ".join(generations)
     words = tokenizer.tokenize(combined_text)  

@@ -12,7 +12,7 @@ strategies = [
     "Nucleus Sampling (p=0.95)"
 ]
 
-# Function that returns decoding function for all strategies
+# Function that returns decoding function for each strategy
 def get_decoding_functions(inputs, model, tokenizer):
     return [
         lambda: model.generate(
@@ -65,23 +65,20 @@ def get_decoding_functions(inputs, model, tokenizer):
         )
     ]
 
-import torch
-import torch.nn.functional as F
-
 # Beam search sampling function
 def beam_search_strategy(logits, num_beams=4):
     top_k_values, top_k_indices = torch.topk(logits, num_beams, dim=-1)
     top_k_probs = F.softmax(top_k_values, dim=-1)
     prob_mask = torch.zeros_like(logits).scatter_(-1, top_k_indices, top_k_probs)
-    prob_mask = prob_mask / prob_mask.sum(dim=-1, keepdim=True) # Normalise
-    prob_mask = torch.clamp(prob_mask, min=1e-12)  # Avoid log(0)
+    prob_mask = prob_mask / prob_mask.sum(dim=-1, keepdim=True) 
+    prob_mask = torch.clamp(prob_mask, min=1e-12)  
     return prob_mask
 
 # Pure sampling function
 def pure_sampling_strategy(logits):
     probabilities = F.softmax(logits, dim=-1)
     probabilities = probabilities / probabilities.sum(dim=-1, keepdim=True)
-    probabilities = torch.clamp(probabilities, min=1e-12) # Avoid log(0)
+    probabilities = torch.clamp(probabilities, min=1e-12) 
     return probabilities
 
 # Temperature sampling function
@@ -89,7 +86,7 @@ def temperature_strategy(logits, temperature=0.9):
     scaled_logits = logits / temperature
     probabilities = F.softmax(scaled_logits, dim=-1)
     probabilities = probabilities / probabilities.sum(dim=-1, keepdim=True)
-    probabilities = torch.clamp(probabilities, min=1e-12) # Avoid log(0)
+    probabilities = torch.clamp(probabilities, min=1e-12) 
     return probabilities
 
 # Top-k sampling function
@@ -97,8 +94,8 @@ def top_k_strategy(logits, k=640):
     top_k_values, top_k_indices = torch.topk(logits, k, dim=-1)
     top_k_probs = F.softmax(top_k_values, dim=-1)
     prob_mask = torch.zeros_like(logits).scatter_(-1, top_k_indices, top_k_probs)
-    prob_mask = prob_mask / prob_mask.sum(dim=-1, keepdim=True) # Normalise
-    prob_mask = torch.clamp(prob_mask, min=1e-12) # Avoid log(0)
+    prob_mask = prob_mask / prob_mask.sum(dim=-1, keepdim=True) 
+    prob_mask = torch.clamp(prob_mask, min=1e-12) 
     return prob_mask
 
 # Top-k with temperature sampling function
@@ -107,8 +104,8 @@ def top_k_with_temperature_strategy(logits, k=40, temperature=0.7):
     top_k_values, top_k_indices = torch.topk(scaled_logits, k, dim=-1)
     top_k_probs = F.softmax(top_k_values, dim=-1)
     prob_mask = torch.zeros_like(logits).scatter_(-1, top_k_indices, top_k_probs)
-    prob_mask = prob_mask / prob_mask.sum(dim=-1, keepdim=True) # Normalise
-    prob_mask = torch.clamp(prob_mask, min=1e-12) # Avoid log(0)
+    prob_mask = prob_mask / prob_mask.sum(dim=-1, keepdim=True) 
+    prob_mask = torch.clamp(prob_mask, min=1e-12) 
     return prob_mask
 
 # Nucleus sampling function
@@ -121,8 +118,8 @@ def nucleus_strategy(logits, p=0.95):
     sorted_logits[mask] = -float('Inf')
     probabilities = F.softmax(sorted_logits, dim=-1)
     prob_mask = torch.zeros_like(logits).scatter_(-1, sorted_indices, probabilities)
-    prob_mask = prob_mask / prob_mask.sum(dim=-1, keepdim=True)  # Normalise
-    prob_mask = torch.clamp(prob_mask, min=1e-12) # Avoid log(0)
+    prob_mask = prob_mask / prob_mask.sum(dim=-1, keepdim=True)  
+    prob_mask = torch.clamp(prob_mask, min=1e-12) 
     return prob_mask
 
 # Dictionnary of sampling functions

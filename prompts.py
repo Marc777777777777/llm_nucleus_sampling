@@ -1,3 +1,4 @@
+# List of prompts
 prompts = [
     "Describe a rainforest untouched by human hands and its unique ecosystem.",
     "Write a story about a magical sword that grants its wielder one wish.",
